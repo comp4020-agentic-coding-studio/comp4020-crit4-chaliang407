@@ -3,12 +3,107 @@ import BaseLayout from "../layouts/BaseLayout.astro";
 ---
 
 <BaseLayout
-  title="COMP4020 prototype"
-  description="Replace this with one sentence saying what this page is. A search result and a link preview both show it."
+  title="Orbit"
+  description="Orbit: a single-gesture browser instrument. Touch and drag to play."
 >
-  <h1>COMP4020 prototype</h1>
-  <p data-testid="intro">
-    Replace this with your prototype. This week's brief is on the course website;
-    <code>spec/README.md</code> explains how the checks in this repo relate to it.
-  </p>
+  <h1 class="visually-hidden">Orbit</h1>
+  <div id="instrument">
+    <p id="hint">Touch anywhere</p>
+    <div id="orb-layer" aria-hidden="true"></div>
+  </div>
+
+  <script>
+    import { initOrbit } from "../scripts/orbit";
+    initOrbit();
+  </script>
 </BaseLayout>
+
+<style>
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  #instrument {
+    position: fixed;
+    inset: 0;
+    touch-action: none;
+    overflow: hidden;
+  }
+
+  #hint {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    margin: 0;
+    color: rgb(255 255 255 / 55%);
+    font-family: system-ui, sans-serif;
+    font-size: 1.1rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    pointer-events: none;
+    transition: opacity 0.4s ease;
+  }
+
+  #hint.is-hidden {
+    opacity: 0;
+  }
+
+  #orb-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  #orb-layer :global(.orb) {
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    margin: -6px 0 0 -6px;
+    border-radius: 50%;
+    background: #bfe8ff;
+    box-shadow: 0 0 20px 6px rgb(191 232 255 / 60%);
+    opacity: 0;
+    transform: scale(0.4);
+    transition:
+      left 0.06s linear,
+      top 0.06s linear,
+      opacity 0.25s ease,
+      transform 0.25s ease;
+  }
+
+  #orb-layer :global(.orb.is-active) {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  #orb-layer :global(.ripple) {
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    margin: -6px 0 0 -6px;
+    border-radius: 50%;
+    border: 1px solid rgb(191 232 255 / 70%);
+    animation: ripple-expand 0.8s ease-out forwards;
+  }
+
+  @keyframes ripple-expand {
+    from {
+      transform: scale(0.3);
+      opacity: 0.8;
+    }
+
+    to {
+      transform: scale(9);
+      opacity: 0;
+    }
+  }
+</style>

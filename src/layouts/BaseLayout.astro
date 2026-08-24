@@ -29,7 +29,7 @@ const { title, description } = Astro.props;
   <body>
     <header>
       <nav aria-label="Primary">
-        <a href="./">Home</a>
+        <a href="./">Orbit</a>
       </nav>
     </header>
     <main>
@@ -37,3 +37,31 @@ const { title, description } = Astro.props;
     </main>
   </body>
 </html>
+
+<style>
+  header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 1;
+  }
+
+  nav a {
+    display: inline-block;
+    padding: 0.75rem 1rem;
+    color: rgb(255 255 255 / 35%);
+    font-family: system-ui, sans-serif;
+    font-size: 0.8rem;
+    letter-spacing: 0.05em;
+    text-decoration: none;
+  }
+
+  nav a:hover,
+  nav a:focus-visible {
+    color: rgb(255 255 255 / 70%);
+  }
+
+  main {
+    min-height: 100vh;
+  }
+</style>
