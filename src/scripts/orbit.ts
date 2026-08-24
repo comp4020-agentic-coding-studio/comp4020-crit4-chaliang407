@@ -79,7 +79,7 @@ interface Voice {
 
 export function initOrbit(): void {
   const instrumentEl = document.getElementById("instrument");
-  const hint = document.getElementById("hint");
+  const intro = document.getElementById("intro");
   const orbLayerEl = document.getElementById("orb-layer");
   if (!instrumentEl || !orbLayerEl) return;
   // Re-bound so TS keeps these as non-null in the closures below --- narrowing
@@ -214,7 +214,7 @@ export function initOrbit(): void {
     spawnOrb(pointerId, x, y);
     spawnMark("ripple", x, y);
     setGlow(brightnessForY(y, height));
-    hint?.classList.add("is-hidden");
+    intro?.classList.add("is-hidden");
   }
 
   function updateVoice(pointerId: number, x: number, y: number, width: number, height: number): void {
@@ -281,4 +281,19 @@ export function initOrbit(): void {
   const release = (event: PointerEvent) => stopVoice(event.pointerId);
   instrument.addEventListener("pointerup", release);
   instrument.addEventListener("pointercancel", release);
+
+  // Purely decorative: the ambient rings/stars drift a few pixels with
+  // pointer position, independent of the voice/audio logic above. Skipped
+  // entirely under prefers-reduced-motion.
+  const ambient = document.getElementById("ambient");
+  const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (ambient && !prefersReducedMotion) {
+    instrument.addEventListener("pointermove", (event) => {
+      const rect = instrument.getBoundingClientRect();
+      const px = (event.clientX - rect.left) / rect.width - 0.5;
+      const py = (event.clientY - rect.top) / rect.height - 0.5;
+      ambient.style.setProperty("--px", px.toFixed(3));
+      ambient.style.setProperty("--py", py.toFixed(3));
+    });
+  }
 }
