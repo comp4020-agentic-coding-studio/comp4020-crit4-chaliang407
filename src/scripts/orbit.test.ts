@@ -4,6 +4,7 @@ import {
   MAX_FILTER_FREQUENCY,
   MIN_FILTER_FREQUENCY,
   STEP_COUNT,
+  brightnessForY,
   filterFrequencyForY,
   frequencyForStep,
   frequencyForX,
@@ -53,6 +54,25 @@ describe("frequencyForX", () => {
     for (const x of [0, 37, 123, 499, 500, 501, 812, 999]) {
       expect(allowed.has(frequencyForX(x, 1000))).toBe(true);
     }
+  });
+});
+
+describe("brightnessForY", () => {
+  it("is 1 (brightest) at the top", () => {
+    expect(brightnessForY(0, 800)).toBe(1);
+  });
+
+  it("is 0 (darkest) at the bottom", () => {
+    expect(brightnessForY(800, 800)).toBe(0);
+  });
+
+  it("clamps out-of-bounds positions into [0, 1]", () => {
+    expect(brightnessForY(-100, 800)).toBe(1);
+    expect(brightnessForY(1000, 800)).toBe(0);
+  });
+
+  it("returns 1 for a degenerate (zero-height) element", () => {
+    expect(brightnessForY(400, 0)).toBe(1);
   });
 });
 

@@ -38,6 +38,28 @@ import BaseLayout from "../layouts/BaseLayout.astro";
     overflow: hidden;
   }
 
+  /*
+    A single custom property drives the whole background: JS sets --glow to
+    the same 0..1 brightness used for the audio filter, so the space itself
+    dims and lifts with vertical drag instead of only the timbre changing.
+    @property makes an otherwise-opaque custom property transition smoothly,
+    so releasing back to the resting brightness fades rather than jumps.
+  */
+  @property --glow {
+    syntax: "<number>";
+    inherits: true;
+    initial-value: 0.35;
+  }
+
+  #instrument::before {
+    content: "";
+    position: absolute;
+    inset: -25%;
+    background: radial-gradient(ellipse at center, #1b3a5c 0%, #04070d 65%);
+    filter: brightness(calc(0.65 + var(--glow) * 0.9));
+    transition: filter 0.5s ease;
+  }
+
   #hint {
     position: absolute;
     top: 50%;
@@ -76,8 +98,8 @@ import BaseLayout from "../layouts/BaseLayout.astro";
     transition:
       left 0.06s linear,
       top 0.06s linear,
-      opacity 0.25s ease,
-      transform 0.25s ease;
+      opacity 0.6s ease,
+      transform 0.6s ease;
   }
 
   #orb-layer :global(.orb.is-active) {
@@ -85,6 +107,7 @@ import BaseLayout from "../layouts/BaseLayout.astro";
     transform: scale(1);
   }
 
+  /* Onset: a bigger ring once, when a gesture begins. */
   #orb-layer :global(.ripple) {
     position: absolute;
     width: 12px;
@@ -103,6 +126,54 @@ import BaseLayout from "../layouts/BaseLayout.astro";
 
     to {
       transform: scale(9);
+      opacity: 0;
+    }
+  }
+
+  /* Path: a small dot left behind every so often while dragging. */
+  #orb-layer :global(.trail) {
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    margin: -3px 0 0 -3px;
+    border-radius: 50%;
+    background: rgb(191 232 255 / 45%);
+    box-shadow: 0 0 10px 2px rgb(191 232 255 / 25%);
+    animation: trail-fade 900ms ease-out forwards;
+  }
+
+  @keyframes trail-fade {
+    from {
+      transform: scale(1);
+      opacity: 0.7;
+    }
+
+    to {
+      transform: scale(0.3);
+      opacity: 0;
+    }
+  }
+
+  /* Pitch change: a smaller, quieter ring than the onset ripple, so it reads
+     as a note-change tick rather than another gesture starting. */
+  #orb-layer :global(.pulse) {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    margin: -5px 0 0 -5px;
+    border-radius: 50%;
+    border: 1px solid rgb(191 232 255 / 55%);
+    animation: pulse-expand 700ms ease-out forwards;
+  }
+
+  @keyframes pulse-expand {
+    from {
+      transform: scale(0.4);
+      opacity: 0.9;
+    }
+
+    to {
+      transform: scale(5);
       opacity: 0;
     }
   }
