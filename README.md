@@ -33,7 +33,8 @@ pnpm check:evidence  # the process-evidence check CI runs before you ship
 pnpm build           # produce dist/ (what gets deployed)
 
 # reproduce CI's links check before you push
-pnpm dlx linkinator ./dist --silent --skip "^https?://(?!localhost|127)"
+pnpm dlx linkinator ./dist --silent --skip "^https?://(?!localhost|127)" \
+  --url-rewrite-search "/comp4020-crit4-chaliang407/" --url-rewrite-replace "/"
 ```
 
 `mise` is the course's recommended runtime manager. If you use another manager

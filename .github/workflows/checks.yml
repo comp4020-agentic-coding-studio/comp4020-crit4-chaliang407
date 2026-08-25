@@ -51,7 +51,18 @@ jobs:
         # passes having scanned zero links. The stack skill rewrites the
         # command below when it converts the repo to Astro, and carries the
         # same skip over, so this comment holds either way.
-        run: pnpm dlx linkinator ./dist --silent --skip "^https?://(?!localhost|127)"
+        #
+        # astro.config.mjs sets `base` to this repo's Pages subpath, so Astro's
+        # generated asset tags are root-absolute under that subpath (e.g.
+        # /comp4020-crit4-chaliang407/_astro/...) --- correct once GitHub Pages
+        # serves the real subpath, but linkinator resolves root-absolute links
+        # against ./dist directly, with no subpath. The rewrite collapses that
+        # segment back out so the local check matches what's actually on disk;
+        # it must stay unanchored, since linkinator applies it to the resolved
+        # path (e.g. dist/<base>/_astro/...), not the raw href.
+        run: >-
+          pnpm dlx linkinator ./dist --silent --skip "^https?://(?!localhost|127)"
+          --url-rewrite-search "/comp4020-crit4-chaliang407/" --url-rewrite-replace "/"
       - name: Scan for committed secrets
         # Pinned, both halves: the SHA fixes the action's script, and `version`
         # fixes the scanner image, which otherwise floats on :latest. These two
