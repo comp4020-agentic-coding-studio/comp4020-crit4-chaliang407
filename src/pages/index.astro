@@ -26,6 +26,24 @@ import BaseLayout from "../layouts/BaseLayout.astro";
     <div id="orb-layer" aria-hidden="true"></div>
   </div>
 
+  <div id="orbit-controls">
+    <button id="undo-orbit" type="button" aria-label="Undo last orbit" disabled>
+      <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+        <path d="M9 15 4 10l5-5" />
+        <path d="M4 10h10a6 6 0 0 1 0 12h-3" />
+      </svg>
+      <span>Undo</span>
+    </button>
+    <button id="clear-orbits" type="button" aria-label="Clear all orbits" disabled>
+      <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+        <path d="M4 7h16" />
+        <path d="M9 7V4h6v3" />
+        <path d="M6 7l1 13h10l1-13" />
+      </svg>
+      <span>Clear</span>
+    </button>
+  </div>
+
   <script>
     import { initOrbit } from "../scripts/orbit";
     initOrbit();
@@ -324,6 +342,116 @@ import BaseLayout from "../layouts/BaseLayout.astro";
     }
   }
 
+  /* Looping orbits: a faint recorded path with a small glowing playhead
+     tracing it repeatedly. Softer than the live orb --- these are echoes of a
+     gesture, not the gesture itself. */
+  #orb-layer :global(.orbit-path) {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    transition: opacity 0.6s ease;
+  }
+
+  #orb-layer :global(.orbit-path.is-active) {
+    opacity: 1;
+  }
+
+  #orb-layer :global(.orbit-path polyline) {
+    fill: none;
+    stroke: rgb(191 232 255 / 30%);
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  #orb-layer :global(.orbit-playhead) {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    margin: -4px 0 0 -4px;
+    border-radius: 50%;
+    background: rgb(191 232 255 / 70%);
+    box-shadow: 0 0 12px 3px rgb(191 232 255 / 35%);
+    opacity: 0;
+    transition: opacity 0.6s ease;
+  }
+
+  #orb-layer :global(.orbit-playhead.is-active) {
+    opacity: 1;
+  }
+
+  /* Undo/Clear: a small glass pill, not a full toolbar --- present at a
+     glance against the shifting starfield behind it, but sized and toned to
+     stay secondary to the instrument itself. Sits outside #instrument so a
+     click here never bubbles into the gesture-handling pointerdown listener. */
+  #orbit-controls {
+    position: fixed;
+    top: 0.75rem;
+    right: 0.75rem;
+    z-index: 1;
+    display: flex;
+    align-items: stretch;
+    gap: 0.2rem;
+    padding: 0.25rem;
+    border-radius: 999px;
+    background: rgb(15 24 38 / 55%);
+    border: 1px solid rgb(191 232 255 / 16%);
+    box-shadow: 0 4px 18px rgb(0 0 0 / 25%);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+
+  #orbit-controls button {
+    all: unset;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.65rem;
+    border-radius: 999px;
+    color: rgb(191 232 255 / 70%);
+    font-family: system-ui, sans-serif;
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    transition:
+      color 0.2s ease,
+      background-color 0.2s ease,
+      box-shadow 0.2s ease,
+      opacity 0.2s ease;
+  }
+
+  #orbit-controls button svg {
+    flex-shrink: 0;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  #orbit-controls button:hover,
+  #orbit-controls button:focus-visible {
+    color: #eaf6ff;
+    background: rgb(191 232 255 / 14%);
+    box-shadow:
+      0 0 0 1px rgb(191 232 255 / 35%),
+      0 0 16px 3px rgb(160 210 255 / 45%);
+  }
+
+  #orbit-controls button:focus-visible {
+    outline: 1px solid rgb(191 232 255 / 70%);
+    outline-offset: 2px;
+  }
+
+  #orbit-controls button:disabled {
+    color: rgb(191 232 255 / 30%);
+    cursor: default;
+    pointer-events: none;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .ring {
       animation: none;
@@ -338,6 +466,15 @@ import BaseLayout from "../layouts/BaseLayout.astro";
     #orb-layer :global(.trail),
     #orb-layer :global(.pulse) {
       animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+
+    #orb-layer :global(.orbit-path),
+    #orb-layer :global(.orbit-playhead) {
+      transition-duration: 0.01ms !important;
+    }
+
+    #orbit-controls button {
       transition-duration: 0.01ms !important;
     }
   }

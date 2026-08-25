@@ -3,11 +3,19 @@ import {
   BASE_FREQUENCY,
   MAX_FILTER_FREQUENCY,
   MIN_FILTER_FREQUENCY,
+  MIN_LOOP_DURATION_SECONDS,
+  MIN_LOOP_PATH_DISTANCE,
   STEP_COUNT,
+  activeSampleIndex,
   brightnessForY,
+  controlsEnabled,
   filterFrequencyForY,
   frequencyForStep,
   frequencyForX,
+  interpolatePosition,
+  newestLoop,
+  pathLength,
+  qualifiesAsLoop,
   stepForX,
 } from "./orbit";
 
@@ -95,5 +103,130 @@ describe("filterFrequencyForY", () => {
 
   it("returns the max for a degenerate (zero-height) element", () => {
     expect(filterFrequencyForY(400, 0)).toBe(MAX_FILTER_FREQUENCY);
+  });
+});
+
+describe("pathLength", () => {
+  it("is 0 for a single point or empty path", () => {
+    expect(pathLength([])).toBe(0);
+    expect(pathLength([{ x: 10, y: 10 }])).toBe(0);
+  });
+
+  it("sums straight-line distance between consecutive points", () => {
+    expect(
+      pathLength([
+        { x: 0, y: 0 },
+        { x: 3, y: 4 },
+      ]),
+    ).toBeCloseTo(5, 5);
+  });
+
+  it("accumulates across more than two points", () => {
+    const length = pathLength([
+      { x: 0, y: 0 },
+      { x: 3, y: 4 },
+      { x: 3, y: 14 },
+    ]);
+    expect(length).toBeCloseTo(15, 5);
+  });
+});
+
+describe("qualifiesAsLoop", () => {
+  it("rejects a gesture that is too brief even if it travelled far", () => {
+    expect(qualifiesAsLoop(MIN_LOOP_DURATION_SECONDS / 2, MIN_LOOP_PATH_DISTANCE * 10)).toBe(false);
+  });
+
+  it("rejects a gesture that lasted long enough but barely moved (a held tap)", () => {
+    expect(qualifiesAsLoop(MIN_LOOP_DURATION_SECONDS * 10, MIN_LOOP_PATH_DISTANCE / 2)).toBe(false);
+  });
+
+  it("accepts a gesture meeting both thresholds", () => {
+    expect(qualifiesAsLoop(MIN_LOOP_DURATION_SECONDS, MIN_LOOP_PATH_DISTANCE)).toBe(true);
+  });
+});
+
+describe("activeSampleIndex", () => {
+  const samples = [{ t: 0 }, { t: 1 }, { t: 2 }];
+
+  it("is 0 before the first timestamp", () => {
+    expect(activeSampleIndex(samples, -1)).toBe(0);
+  });
+
+  it("advances as elapsed time passes each sample's timestamp", () => {
+    expect(activeSampleIndex(samples, 0.5)).toBe(0);
+    expect(activeSampleIndex(samples, 1)).toBe(1);
+    expect(activeSampleIndex(samples, 1.5)).toBe(1);
+  });
+
+  it("is the last index once elapsed reaches the final timestamp", () => {
+    expect(activeSampleIndex(samples, 2)).toBe(2);
+    expect(activeSampleIndex(samples, 100)).toBe(2);
+  });
+});
+
+describe("interpolatePosition", () => {
+  it("returns the single point for a one-sample path", () => {
+    expect(interpolatePosition([{ t: 0, x: 5, y: 7 }], 0)).toEqual({ x: 5, y: 7 });
+  });
+
+  it("returns {0, 0} for an empty path", () => {
+    expect(interpolatePosition([], 0)).toEqual({ x: 0, y: 0 });
+  });
+
+  it("lands exactly on a sample when elapsed matches its timestamp", () => {
+    const samples = [
+      { t: 0, x: 0, y: 0 },
+      { t: 1, x: 10, y: 0 },
+    ];
+    expect(interpolatePosition(samples, 1)).toEqual({ x: 10, y: 0 });
+  });
+
+  it("interpolates linearly between two samples", () => {
+    const samples = [
+      { t: 0, x: 0, y: 0 },
+      { t: 2, x: 10, y: 20 },
+    ];
+    expect(interpolatePosition(samples, 1)).toEqual({ x: 5, y: 10 });
+  });
+
+  it("clamps to the final position once elapsed passes the last timestamp", () => {
+    const samples = [
+      { t: 0, x: 0, y: 0 },
+      { t: 1, x: 10, y: 0 },
+    ];
+    expect(interpolatePosition(samples, 5)).toEqual({ x: 10, y: 0 });
+  });
+});
+
+describe("newestLoop", () => {
+  it("is undefined for an empty list", () => {
+    expect(newestLoop([])).toBeUndefined();
+  });
+
+  it("is the last (most recently created) entry", () => {
+    expect(newestLoop(["oldest", "middle", "newest"])).toBe("newest");
+  });
+
+  it("supports repeated Undo by working through a shrinking list newest-to-oldest", () => {
+    const loops = ["oldest", "middle", "newest"];
+    const order: string[] = [];
+    while (loops.length > 0) {
+      const loop = newestLoop(loops);
+      if (loop === undefined) break;
+      order.push(loop);
+      loops.splice(loops.indexOf(loop), 1);
+    }
+    expect(order).toEqual(["newest", "middle", "oldest"]);
+  });
+});
+
+describe("controlsEnabled", () => {
+  it("is disabled when there are no recorded orbits", () => {
+    expect(controlsEnabled(0)).toBe(false);
+  });
+
+  it("is enabled once at least one orbit exists", () => {
+    expect(controlsEnabled(1)).toBe(true);
+    expect(controlsEnabled(3)).toBe(true);
   });
 });
