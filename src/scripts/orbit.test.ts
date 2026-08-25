@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   BASE_FREQUENCY,
+  KEYBOARD_KEYS,
   MAX_FILTER_FREQUENCY,
   MIN_FILTER_FREQUENCY,
   MIN_LOOP_DURATION_SECONDS,
@@ -9,6 +10,7 @@ import {
   activeSampleIndex,
   brightnessForY,
   controlsEnabled,
+  filterFrequencyForBrightness,
   filterFrequencyForY,
   frequencyForStep,
   frequencyForX,
@@ -16,6 +18,7 @@ import {
   newestLoop,
   pathLength,
   qualifiesAsLoop,
+  stepForKeyIndex,
   stepForX,
 } from "./orbit";
 
@@ -217,6 +220,47 @@ describe("newestLoop", () => {
       loops.splice(loops.indexOf(loop), 1);
     }
     expect(order).toEqual(["newest", "middle", "oldest"]);
+  });
+});
+
+describe("filterFrequencyForBrightness", () => {
+  it("matches filterFrequencyForY at the same brightness", () => {
+    expect(filterFrequencyForBrightness(brightnessForY(0, 800))).toBeCloseTo(
+      filterFrequencyForY(0, 800),
+      5,
+    );
+    expect(filterFrequencyForBrightness(brightnessForY(800, 800))).toBeCloseTo(
+      filterFrequencyForY(800, 800),
+      5,
+    );
+  });
+
+  it("returns the min at 0 and the max at 1", () => {
+    expect(filterFrequencyForBrightness(0)).toBeCloseTo(MIN_FILTER_FREQUENCY, 5);
+    expect(filterFrequencyForBrightness(1)).toBeCloseTo(MAX_FILTER_FREQUENCY, 5);
+  });
+});
+
+describe("stepForKeyIndex", () => {
+  it("maps the first key to the lowest step", () => {
+    expect(stepForKeyIndex(0)).toBe(0);
+  });
+
+  it("maps the last key to the highest step", () => {
+    expect(stepForKeyIndex(KEYBOARD_KEYS.length - 1)).toBe(STEP_COUNT - 1);
+  });
+
+  it("increases across the row, spanning the full pitch range like a full-width drag does", () => {
+    const steps = KEYBOARD_KEYS.map((_, index) => stepForKeyIndex(index));
+    for (let i = 1; i < steps.length; i++) {
+      expect(steps[i]).toBeGreaterThan(steps[i - 1]);
+    }
+    expect(Math.min(...steps)).toBe(0);
+    expect(Math.max(...steps)).toBe(STEP_COUNT - 1);
+  });
+
+  it("returns step 0 for a degenerate (single-key) row", () => {
+    expect(stepForKeyIndex(0, 1)).toBe(0);
   });
 });
 

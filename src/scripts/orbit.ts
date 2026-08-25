@@ -48,6 +48,22 @@ export const LOOP_DISTANCE_FILTER_FREQUENCY = 3200;
 export const LOOP_FADE_IN_SECONDS = 0.4;
 export const LOOP_FADE_OUT_SECONDS = 0.6;
 
+// Keyboard playing: a fixed row of physical keys spans the same pitch range
+// a full-width drag does --- the same instrument played a different way, not
+// a second control scheme. There's no vertical axis on a keyboard, so every
+// key uses one fixed, pleasant filter brightness instead of requiring one.
+export const KEYBOARD_KEYS: readonly string[] = [
+  "KeyA",
+  "KeyS",
+  "KeyD",
+  "KeyF",
+  "KeyG",
+  "KeyH",
+  "KeyJ",
+  "KeyK",
+];
+export const KEYBOARD_FILTER_BRIGHTNESS = 0.65;
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
@@ -71,6 +87,14 @@ export function frequencyForX(x: number, width: number): number {
   return frequencyForStep(stepForX(x, width));
 }
 
+// Spreads a row of keyCount keys across the same low-to-high pitch range a
+// full-width drag covers, rather than only reaching the first keyCount of
+// STEP_COUNT steps.
+export function stepForKeyIndex(index: number, keyCount: number = KEYBOARD_KEYS.length): number {
+  if (keyCount <= 1) return 0;
+  return Math.round((index / (keyCount - 1)) * (STEP_COUNT - 1));
+}
+
 // Top of the screen is bright (1), bottom is dark (0). Shared by the filter
 // cutoff mapping below and the background glow, so both track the same feel.
 export function brightnessForY(y: number, height: number): number {
@@ -79,12 +103,19 @@ export function brightnessForY(y: number, height: number): number {
   return 1 - fraction;
 }
 
+// The exponential curve itself, shared by anything driving the lowpass
+// cutoff from a 0..1 brightness value --- vertical drag position for mouse
+// and touch, or one fixed default for keyboard notes, which have no
+// vertical axis to read.
+export function filterFrequencyForBrightness(brightness: number): number {
+  return MIN_FILTER_FREQUENCY * (MAX_FILTER_FREQUENCY / MIN_FILTER_FREQUENCY) ** brightness;
+}
+
 // Vertical position drives the lowpass cutoff. The range is covered
 // exponentially so it sweeps evenly by ear rather than bunching all the
 // audible change near one edge.
 export function filterFrequencyForY(y: number, height: number): number {
-  const brightness = brightnessForY(y, height);
-  return MIN_FILTER_FREQUENCY * (MAX_FILTER_FREQUENCY / MIN_FILTER_FREQUENCY) ** brightness;
+  return filterFrequencyForBrightness(brightnessForY(y, height));
 }
 
 // Total on-screen distance a recorded path covers, used to decide whether a
@@ -240,6 +271,9 @@ export function initOrbit(): void {
   const lastSteps = new Map<number, number>();
   const recordings = new Map<number, Recording>();
   const loops: OrbitLoop[] = [];
+  // Keyed by physical key code, not pointerId, so distinct held keys can
+  // never collide and multiple keys held at once each get their own voice.
+  const keyboardVoices = new Map<string, Voice>();
   const undoButton = document.getElementById("undo-orbit") as HTMLButtonElement | null;
   const clearButton = document.getElementById("clear-orbits") as HTMLButtonElement | null;
 
@@ -308,13 +342,16 @@ export function initOrbit(): void {
     spawnMark("pulse", x, y);
   }
 
-  function startVoice(pointerId: number, x: number, y: number, width: number, height: number): void {
-    const { context, master, delaySend: send } = ensureAudio();
-    if (context.state === "suspended") void context.resume();
-    if (voices.has(pointerId)) return;
-
-    const step = stepForX(x, width);
-    const filterFrequency = filterFrequencyForY(y, height);
+  // The oscillator/filter/gain graph shared by every sustained voice ---
+  // live drag, or a held keyboard key. Only how step/filterFrequency are
+  // sourced differs between callers.
+  function createOscillatorVoice(
+    step: number,
+    filterFrequency: number,
+    context: AudioContext,
+    master: GainNode,
+    send: DelayNode,
+  ): Voice {
     const oscillator = context.createOscillator();
     const filter = context.createBiquadFilter();
     const gain = context.createGain();
@@ -334,7 +371,33 @@ export function initOrbit(): void {
     gain.connect(send);
     oscillator.start();
 
-    voices.set(pointerId, { oscillator, filter, gain });
+    return { oscillator, filter, gain };
+  }
+
+  // The release/cleanup half of the same shared graph.
+  function releaseVoice(voice: Voice, context: AudioContext): void {
+    const now = context.currentTime;
+    voice.gain.gain.cancelScheduledValues(now);
+    voice.gain.gain.setValueAtTime(voice.gain.gain.value, now);
+    voice.gain.gain.exponentialRampToValueAtTime(0.0001, now + RELEASE_SECONDS);
+    voice.oscillator.stop(now + RELEASE_SECONDS + 0.05);
+    voice.oscillator.addEventListener("ended", () => {
+      voice.oscillator.disconnect();
+      voice.filter.disconnect();
+      voice.gain.disconnect();
+    });
+  }
+
+  function startVoice(pointerId: number, x: number, y: number, width: number, height: number): void {
+    const { context, master, delaySend: send } = ensureAudio();
+    if (context.state === "suspended") void context.resume();
+    if (voices.has(pointerId)) return;
+
+    const step = stepForX(x, width);
+    const filterFrequency = filterFrequencyForY(y, height);
+    const voice = createOscillatorVoice(step, filterFrequency, context, master, send);
+
+    voices.set(pointerId, voice);
     trailPoints.set(pointerId, { x, y });
     lastSteps.set(pointerId, step);
     recordings.set(pointerId, {
@@ -345,6 +408,29 @@ export function initOrbit(): void {
     spawnMark("ripple", x, y);
     setGlow(brightnessForY(y, height));
     intro?.classList.add("is-hidden");
+  }
+
+  // Keyboard notes never touch recordings/orbs/trails --- looping stays a
+  // drawn-gesture feature, and a keyboard note has no on-screen position to
+  // show a trail at.
+  function startKeyboardVoice(code: string, index: number): void {
+    if (keyboardVoices.has(code)) return;
+    const { context, master, delaySend: send } = ensureAudio();
+    if (context.state === "suspended") void context.resume();
+
+    const step = stepForKeyIndex(index);
+    const filterFrequency = filterFrequencyForBrightness(KEYBOARD_FILTER_BRIGHTNESS);
+    const voice = createOscillatorVoice(step, filterFrequency, context, master, send);
+
+    keyboardVoices.set(code, voice);
+    intro?.classList.add("is-hidden");
+  }
+
+  function stopKeyboardVoice(code: string): void {
+    const voice = keyboardVoices.get(code);
+    if (!voice || !audioContext) return;
+    keyboardVoices.delete(code);
+    releaseVoice(voice, audioContext);
   }
 
   function updateVoice(pointerId: number, x: number, y: number, width: number, height: number): void {
@@ -378,16 +464,7 @@ export function initOrbit(): void {
     trailPoints.delete(pointerId);
     lastSteps.delete(pointerId);
 
-    const now = audioContext.currentTime;
-    voice.gain.gain.cancelScheduledValues(now);
-    voice.gain.gain.setValueAtTime(voice.gain.gain.value, now);
-    voice.gain.gain.exponentialRampToValueAtTime(0.0001, now + RELEASE_SECONDS);
-    voice.oscillator.stop(now + RELEASE_SECONDS + 0.05);
-    voice.oscillator.addEventListener("ended", () => {
-      voice.oscillator.disconnect();
-      voice.filter.disconnect();
-      voice.gain.disconnect();
-    });
+    releaseVoice(voice, audioContext);
 
     releaseOrb(pointerId);
     if (voices.size === 0) setGlow(REST_BRIGHTNESS);
@@ -572,6 +649,29 @@ export function initOrbit(): void {
   const release = (event: PointerEvent) => stopVoice(event.pointerId);
   instrument.addEventListener("pointerup", release);
   instrument.addEventListener("pointercancel", release);
+
+  // A S D F G H J K play the instrument without any on-screen piano ---
+  // listening on window rather than instrument since nothing here is
+  // focusable. event.repeat is the browser's own auto-repeat signal, so
+  // holding a key can't spawn a new oscillator on top of the sustained one.
+  window.addEventListener("keydown", (event) => {
+    if (event.repeat) return;
+    const index = KEYBOARD_KEYS.indexOf(event.code);
+    if (index === -1) return;
+    startKeyboardVoice(event.code, index);
+  });
+
+  window.addEventListener("keyup", (event) => {
+    const index = KEYBOARD_KEYS.indexOf(event.code);
+    if (index === -1) return;
+    stopKeyboardVoice(event.code);
+  });
+
+  // Mirrors pointercancel above: losing focus mid-hold (alt-tab) shouldn't
+  // leave a keyboard note stuck on forever.
+  window.addEventListener("blur", () => {
+    for (const code of keyboardVoices.keys()) stopKeyboardVoice(code);
+  });
 
   // Purely decorative: the ambient rings/stars drift a few pixels with
   // pointer position, independent of the voice/audio logic above. Skipped
